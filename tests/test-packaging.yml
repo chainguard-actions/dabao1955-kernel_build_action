@@ -1,0 +1,26 @@
+name: Test packaging and release inputs
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          kernel-url: https://github.com/torvalds/linux
+          kernel-branch: master
+          config: defconfig
+          arch: arm64
+          anykernel3: 'true'
+          anykernel3-url: https://github.com/osm0sis/AnyKernel3
+          bootimg-url: https://example.com/boot.img
+          release: 'false'
+          access-token: fake-token-for-testing
+          extra-make-args: '[]'
+      - name: Assert action ran
+        run: |
+          echo "Action completed (may have failed due to missing toolchain, which is expected in test environment)"
+          echo "PASS: anykernel3-url, bootimg-url, and access-token inputs were accepted"

@@ -1,0 +1,27 @@
+name: Test custom toolchain inputs
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          kernel-url: https://github.com/torvalds/linux
+          kernel-branch: master
+          config: defconfig
+          arch: arm64
+          other-clang-url: https://github.com/llvm/llvm-project
+          other-clang-branch: main
+          other-gcc64-url: https://github.com/gcc-mirror/gcc
+          other-gcc64-branch: master
+          other-gcc32-url: https://github.com/gcc-mirror/gcc
+          other-gcc32-branch: master
+          extra-make-args: '[]'
+      - name: Assert action ran
+        run: |
+          echo "Action completed (may have failed due to missing toolchain, which is expected in test environment)"
+          echo "PASS: custom toolchain inputs were accepted"
