@@ -9,6 +9,7 @@ Hardened by [Chainguard](https://www.chainguard.dev) from the upstream action at
 | Version | Tag | Upstream commit |
 |---------|-----|-----------------|
 | v1.10.0 | [`v1.10.0`](https://github.com/chainguard-actions/dabao1955-kernel_build_action/tree/v1.10.0) | [`30bd4cf`](https://github.com/dabao1955/kernel_build_action/commit/30bd4cf30c35db3236aa26a7e296a216a2d93997) |
+| v1.10.0rc1 | [`v1.10.0rc1`](https://github.com/chainguard-actions/dabao1955-kernel_build_action/tree/v1.10.0rc1) | [`ae1b653`](https://github.com/dabao1955/kernel_build_action/commit/ae1b653a83b3f3b5b9b3d2b46b008c87bb4606a3) |
 
 ## Privacy
 
