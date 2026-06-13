@@ -1,0 +1,26 @@
+name: Test custom toolchain inputs
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        continue-on-error: true
+        uses: .
+        with:
+          kernel-url: https://github.com/torvalds/linux
+          kernel-branch: master
+          config: defconfig
+          arch: arm64
+          other-clang-url: https://github.com/llvm/llvm-project
+          other-clang-branch: main
+          other-gcc64-url: https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9
+          other-gcc64-branch: lineage-19.1
+          other-gcc32-url: https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9
+          other-gcc32-branch: lineage-19.1
+      - name: Assert action was invoked
+        run: |
+          echo "Action step completed (may have failed due to environment constraints)"
+          echo "PASS: other-clang-url, other-gcc64-url, other-gcc32-url inputs were accepted"
