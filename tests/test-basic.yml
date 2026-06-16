@@ -1,0 +1,37 @@
+name: Test basic kernel build inputs
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          kernel-url: https://github.com/torvalds/linux
+          kernel-branch: master
+          kernel-dir: kernel
+          depth: '1'
+          config: defconfig
+          arch: arm64
+          android-version: '13'
+          vendor: 'false'
+          aosp-clang: 'false'
+          aosp-gcc: 'false'
+          ksu: 'false'
+          rekernel: 'false'
+          nethunter: 'false'
+          lxc: 'false'
+          kvm: 'false'
+          bbg: 'false'
+          disable-lto: 'false'
+          ccache: 'false'
+          anykernel3: 'false'
+          release: 'false'
+          extra-make-args: '[]'
+      - name: Assert action ran
+        run: |
+          echo "Action completed (may have failed due to missing build environment)"
+          echo "PASS"

@@ -1,0 +1,37 @@
+{
+  "name": "kernel-build-action",
+  "version": "1.9.2",
+  "description": "Android Kernel Build Action",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "rm -rf dist && esbuild src/index.ts --bundle --platform=node --target=node20 --outfile=dist/index.js && esbuild src/post.ts --bundle --platform=node --target=node20 --outfile=dist/post/index.js --format=cjs",
+    "lint": "eslint src/**/*.ts",
+    "format": "prettier --write src/**/*.ts",
+    "format:check": "prettier --check src/**/*.ts",
+    "test": "vitest --coverage"
+  },
+  "dependencies": {
+    "@actions/artifact": "^6.2.1",
+    "@actions/cache": "^6.0.0",
+    "@actions/core": "^3.0.0",
+    "@actions/exec": "^3.0.0",
+    "@actions/github": "^9.0.0",
+    "@actions/tool-cache": "^4.0.0",
+    "@octokit/core": "^7.0.6",
+    "@octokit/graphql": "^9.0.3",
+    "@octokit/request": "^10.0.8",
+    "@octokit/rest": "^22.0.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.0",
+    "@types/node": "^25.5.0",
+    "@typescript-eslint/eslint-plugin": "^8.57.1",
+    "@typescript-eslint/parser": "^8.57.1",
+    "@vitest/coverage-v8": "^3.0.0",
+    "esbuild": "^0.27.4",
+    "eslint": "^10.0.3",
+    "prettier": "^3.2.5",
+    "typescript": "^5.4.4",
+    "vitest": "^3.0.0"
+  }
+}
