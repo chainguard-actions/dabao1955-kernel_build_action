@@ -1,0 +1,45 @@
+name: Test basic usage with local kernel path
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_EVENT_NAME: push
+      GITHUB_REF: refs/heads/main
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Create minimal fake kernel source
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/fake-kernel/arch/arm64/configs"
+          echo "# Minimal defconfig" > "$GITHUB_WORKSPACE/fake-kernel/arch/arm64/configs/defconfig"
+          echo "CONFIG_64BIT=y" >> "$GITHUB_WORKSPACE/fake-kernel/arch/arm64/configs/defconfig"
+          touch "$GITHUB_WORKSPACE/fake-kernel/Makefile"
+          echo "VERSION = 5" >> "$GITHUB_WORKSPACE/fake-kernel/Makefile"
+          echo "PATCHLEVEL = 15" >> "$GITHUB_WORKSPACE/fake-kernel/Makefile"
+          echo "SUBLEVEL = 0" >> "$GITHUB_WORKSPACE/fake-kernel/Makefile"
+          echo "Fake kernel source created"
+          ls -la "$GITHUB_WORKSPACE/fake-kernel/"
+
+      - name: Run action with local kernel path
+        id: action
+        continue-on-error: true
+        uses: .
+        with:
+          kernel-url: ./fake-kernel
+          kernel-dir: kernel
+          config: defconfig
+          arch: arm64
+          depth: '1'
+
+      - name: Assert action ran (not skipped entirely)
+        run: |
+          echo "Action outcome: ${{ steps.action.outcome }}"
+          # The action is expected to attempt the build; it may fail due to
+          # missing toolchain/build environment, but it should not be skipped.
+          if [ "${{ steps.action.outcome }}" = "skipped" ]; then
+            echo "FAIL: action was skipped unexpectedly"
+            exit 1
+          fi
+          echo "PASS: action ran (outcome: ${{ steps.action.outcome }})"

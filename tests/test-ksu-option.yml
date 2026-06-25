@@ -1,0 +1,38 @@
+name: Test KernelSU option
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_EVENT_NAME: push
+      GITHUB_REF: refs/heads/main
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Create minimal fake kernel source directory
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/fake-kernel/arch/arm64/configs"
+          echo "CONFIG_64BIT=y" > "$GITHUB_WORKSPACE/fake-kernel/arch/arm64/configs/defconfig"
+          printf 'VERSION = 5\nPATCHLEVEL = 15\nSUBLEVEL = 0\n' > "$GITHUB_WORKSPACE/fake-kernel/Makefile"
+          echo "Fake kernel source ready"
+
+      - name: Run action with KernelSU enabled
+        id: action
+        continue-on-error: true
+        uses: .
+        with:
+          kernel-url: ./fake-kernel
+          config: defconfig
+          arch: arm64
+          ksu: 'true'
+          ksu-version: main
+
+      - name: Assert action was not skipped
+        run: |
+          echo "Action outcome: ${{ steps.action.outcome }}"
+          if [ "${{ steps.action.outcome }}" = "skipped" ]; then
+            echo "FAIL: action was skipped unexpectedly"
+            exit 1
+          fi
+          echo "PASS: action ran with KernelSU option (outcome: ${{ steps.action.outcome }})"

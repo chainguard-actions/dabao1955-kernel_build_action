@@ -1,0 +1,36 @@
+{
+  "name": "kernel-build-action",
+  "version": "1.9.2",
+  "description": "Android Kernel Build Action",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --minify --platform=node --target=node24 --outfile=dist/index.js && esbuild src/post.ts --bundle  --minify --platform=node --target=node24 --outfile=dist/post/index.js --format=cjs",
+    "lint": "eslint src/**/*.ts",
+    "format": "prettier --write src/**/*.ts",
+    "format:check": "prettier --check src/**/*.ts",
+    "test": "vitest --coverage",
+    "biome": "biome lint src/",
+    "biome:fix": "biome lint --write src/"
+  },
+  "dependencies": {
+    "@actions/artifact": "^6.2.1",
+    "@actions/cache": "^6.1.0",
+    "@actions/core": "^3.0.1",
+    "@actions/exec": "^3.0.0",
+    "@actions/github": "^9.1.1",
+    "@actions/tool-cache": "^4.0.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
+    "@eslint/js": "^10.0.0",
+    "@types/node": "^26.0.1",
+    "@typescript-eslint/eslint-plugin": "^8.62.0",
+    "@typescript-eslint/parser": "^8.62.0",
+    "@vitest/coverage-v8": "4.1.9",
+    "esbuild": "^0.28.1",
+    "eslint": "^10.5.0",
+    "prettier": "^3.8.4",
+    "typescript": "^6.0.3",
+    "vitest": "4.1.9"
+  }
+}

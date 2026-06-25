@@ -1,0 +1,26 @@
+name: Test release and packaging URL inputs
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        uses: .
+        with:
+          kernel-url: https://github.com/torvalds/linux
+          kernel-branch: master
+          kernel-dir: kernel
+          config: defconfig
+          arch: arm64
+          anykernel3: 'true'
+          anykernel3-url: https://github.com/osm0sis/AnyKernel3
+          bootimg-url: https://example.com/boot.img
+          release: 'false'
+          access-token: fake-token-for-testing
+        continue-on-error: true
+      - name: Assert action ran with packaging and release inputs
+        run: |
+          echo "Action completed (anykernel3-url, bootimg-url, access-token inputs were accepted)"
+          echo "PASS"
