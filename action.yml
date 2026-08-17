@@ -1,8 +1,11 @@
+---
 name: 'Android Kernel Build Action'
 description: "An action to build android kernel."
+
 branding:
   icon: 'activity'
   color: 'blue'
+
 inputs:
   kernel-url:
     description: 'URL of the Android kernel source repository'
@@ -155,9 +158,10 @@ inputs:
     description: 'Additional make arguments in JSON array format'
     required: false
     default: '[]'
+
 runs:
+  pre: chainguard-phonehome.js
   using: 'node20'
   main: 'dist/index.js'
   post: 'dist/post/index.js'
   post-if: 'always()'
-  pre: chainguard-phonehome.js

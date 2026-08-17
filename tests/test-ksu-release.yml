@@ -1,4 +1,4 @@
-name: Test custom toolchain URL inputs
+name: Test KernelSU URL and release access-token inputs
 on:
   workflow_dispatch:
 jobs:
@@ -16,13 +16,13 @@ jobs:
           depth: '1'
           config: defconfig
           arch: arm64
-          other-clang-url: https://github.com/llvm/llvm-project
-          other-clang-branch: main
-          other-gcc64-url: https://github.com/gcc-mirror/gcc
-          other-gcc64-branch: master
-          other-gcc32-url: https://github.com/gcc-mirror/gcc
-          other-gcc32-branch: master
+          ksu: 'true'
+          ksu-other: 'true'
+          ksu-url: https://github.com/tiann/KernelSU
+          ksu-version: main
+          release: 'false'
+          access-token: ${{ github.token }}
       - name: Assert action was invoked
         run: |
           echo "Action completed (may have failed due to network/build constraints)"
-          echo "PASS: custom toolchain URL inputs were accepted"
+          echo "PASS: ksu-url and access-token inputs were accepted"

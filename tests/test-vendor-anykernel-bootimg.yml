@@ -1,4 +1,4 @@
-name: Test custom toolchain URL inputs
+name: Test vendor, anykernel3, and bootimg URL inputs
 on:
   workflow_dispatch:
 jobs:
@@ -16,13 +16,14 @@ jobs:
           depth: '1'
           config: defconfig
           arch: arm64
-          other-clang-url: https://github.com/llvm/llvm-project
-          other-clang-branch: main
-          other-gcc64-url: https://github.com/gcc-mirror/gcc
-          other-gcc64-branch: master
-          other-gcc32-url: https://github.com/gcc-mirror/gcc
-          other-gcc32-branch: master
+          vendor: 'true'
+          vendor-url: https://github.com/torvalds/linux
+          vendor-branch: master
+          vendor-dir: vendor
+          anykernel3: 'true'
+          anykernel3-url: https://github.com/osm0sis/AnyKernel3
+          bootimg-url: https://example.com/boot.img
       - name: Assert action was invoked
         run: |
           echo "Action completed (may have failed due to network/build constraints)"
-          echo "PASS: custom toolchain URL inputs were accepted"
+          echo "PASS: inputs were accepted"

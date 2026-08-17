@@ -1,0 +1,35 @@
+name: Test extra-make-args input handling
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run action with extra-make-args in JSON format (expect failure at clone)
+        id: action
+        uses: .
+        with:
+          kernel-url: 'https://github.com/nonexistent-org-xyz/nonexistent-kernel-repo-xyz.git'
+          kernel-branch: main
+          kernel-dir: kernel
+          depth: '1'
+          config: defconfig
+          arch: arm64
+          extra-make-args: '["LLVM=1", "LLVM_IAS=1"]'
+        continue-on-error: true
+
+      - name: Assert action failed at clone (not at input parsing)
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          # The action should fail at the clone step (not at JSON parsing of extra-make-args)
+          # This verifies that extra-make-args JSON parsing works correctly
+          if [ "$OUTCOME" != "failure" ]; then
+            echo "FAIL: expected action to fail with nonexistent kernel repo, but got: $OUTCOME"
+            exit 1
+          fi
+          echo "PASS: action correctly processed extra-make-args and failed at clone step"

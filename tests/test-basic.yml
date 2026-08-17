@@ -1,37 +1,37 @@
-name: Test basic kernel build inputs
+name: Test basic invocation
 on:
   workflow_dispatch:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      GITHUB_ACTIONS: 'true'
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # The action will attempt to install dependencies, clone the kernel, and build.
+      # It will fail at the config-not-found or build step since we're not providing
+      # a real Android kernel. We use continue-on-error and verify it fails gracefully
+      # (not with an unhandled crash / non-zero exit from the runner itself).
       - id: action
         uses: .
-        with:
-          kernel-url: https://github.com/torvalds/linux
-          kernel-branch: master
-          kernel-dir: kernel
-          depth: '1'
-          config: defconfig
-          arch: arm64
-          android-version: '13'
-          vendor: 'false'
-          aosp-clang: 'false'
-          aosp-gcc: 'false'
-          ksu: 'false'
-          rekernel: 'false'
-          nethunter: 'false'
-          lxc: 'false'
-          kvm: 'false'
-          bbg: 'false'
-          disable-lto: 'false'
-          ccache: 'false'
-          anykernel3: 'false'
-          release: 'false'
-          extra-make-args: '[]'
         continue-on-error: true
-      - name: Assert action ran
+        with:
+          kernel-url: 'https://github.com/torvalds/linux'
+          kernel-branch: 'master'
+          kernel-dir: 'kernel'
+          depth: '1'
+          config: 'defconfig'
+          arch: 'arm64'
+
+      - name: Assert action ran (passed or failed gracefully)
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
         run: |
-          echo "Action completed (may fail due to missing toolchain in test env)"
-          echo "PASS"
+          echo "action outcome: $OUTCOME"
+          # The action should either succeed or fail gracefully (not be skipped or crash the runner)
+          if [ "$OUTCOME" = "skipped" ]; then
+            echo "FAIL: action was skipped unexpectedly"
+            exit 1
+          fi
+          echo "PASS: action ran with outcome=$OUTCOME"

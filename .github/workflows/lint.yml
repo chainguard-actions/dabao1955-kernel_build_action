@@ -1,0 +1,51 @@
+name: Lint Check
+on:
+  pull_request:
+  push:
+    branches: main
+    paths:
+      - '.github/workflows/*.yml'
+      - 'actuon.yml'
+      - '.github/ISSUE_TEMPLATE/*.yml'
+
+jobs:
+  yaml-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        lint: [python, js]
+    steps:
+
+      - name: Checkout Repo
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+
+      - name: Setup (Python)
+        if: matrix.lint == 'python'
+        run: |
+          sudo apt install yamllint
+
+      - name: Setup (JS)
+        if: matrix.lint == 'js'
+        run: |
+          yarn global add yaml-lint
+
+      - name: Check yaml(Python)
+        if: matrix.lint == 'python'
+        run: |
+          A=$(find . | grep .yml)
+          /usr/bin/yamllint action.yml .github/dependabot.yml .github/ISSUE_TEMPLATE/common.yml
+
+      - name: Check yaml(JS)
+        if: matrix.lint == 'js'
+        run: |
+          A=$(find . | grep .yml)
+          /usr/local/bin/yamllint $A
