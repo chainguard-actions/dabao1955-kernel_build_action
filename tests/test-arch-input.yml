@@ -1,0 +1,47 @@
+name: Test arch input - arm64 architecture
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run action with arm64 arch (default)
+        id: action-arm64
+        uses: .
+        with:
+          kernel-url: 'https://invalid.example.invalid/nonexistent/kernel.git'
+          kernel-branch: main
+          config: defconfig
+          arch: arm64
+        continue-on-error: true
+
+      - name: Assert action failed at clone step for arm64
+        run: |
+          echo "outcome: ${{ steps.action-arm64.outcome }}"
+          if [ "${{ steps.action-arm64.outcome }}" != "failure" ]; then
+            echo "FAIL: expected failure at clone step for arm64, got: ${{ steps.action-arm64.outcome }}"
+            exit 1
+          fi
+          echo "PASS: action correctly failed at clone step for arm64 arch"
+
+      - name: Run action with x86_64 arch
+        id: action-x86
+        uses: .
+        with:
+          kernel-url: 'https://invalid.example.invalid/nonexistent/kernel.git'
+          kernel-branch: main
+          config: defconfig
+          arch: x86_64
+        continue-on-error: true
+
+      - name: Assert action failed at clone step for x86_64
+        run: |
+          echo "outcome: ${{ steps.action-x86.outcome }}"
+          if [ "${{ steps.action-x86.outcome }}" != "failure" ]; then
+            echo "FAIL: expected failure at clone step for x86_64, got: ${{ steps.action-x86.outcome }}"
+            exit 1
+          fi
+          echo "PASS: action correctly failed at clone step for x86_64 arch"

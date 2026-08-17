@@ -1,0 +1,45 @@
+name: CI
+on:
+  push:
+    branches: main
+    paths:
+      - '.github/workflows/main.yml'
+      - 'action.yml'
+      - 'src/*.ts'
+      - 'package.json'
+
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  ci-test:
+    name: Build Kernel
+    strategy:
+      fail-fast: false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+
+    - name: Build Kernel
+      uses: ./
+      with:
+          kernel-url: https://github.com/AcmeUI-Devices/android_kernel_xiaomi_cas
+          kernel-dir: msm-4.19
+          kernel-branch: taffy
+          config: cas_defconfig
+          arch: arm64
+          aosp-gcc: true
+          aosp-clang: true
+          ksu: true
+          ksu-version: main
+          android-version: 12
+          aosp-clang-version: r383902
+          disable-lto: true
+          anykernel3: true

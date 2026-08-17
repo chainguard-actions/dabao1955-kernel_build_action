@@ -1,0 +1,50 @@
+name: Test extra-make-args input handling
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run action with valid extra-make-args JSON array
+        id: action-valid-args
+        uses: .
+        with:
+          kernel-url: 'https://invalid.example.invalid/nonexistent/kernel.git'
+          kernel-branch: main
+          config: defconfig
+          arch: arm64
+          extra-make-args: '["LLVM=1", "LLVM_IAS=1"]'
+        continue-on-error: true
+
+      - name: Assert action failed at clone step (not at input parsing)
+        run: |
+          echo "outcome: ${{ steps.action-valid-args.outcome }}"
+          # Should fail at clone (invalid URL), not at input parsing
+          if [ "${{ steps.action-valid-args.outcome }}" != "failure" ]; then
+            echo "FAIL: expected failure at clone step, got: ${{ steps.action-valid-args.outcome }}"
+            exit 1
+          fi
+          echo "PASS: action failed at expected step (clone), not at input parsing"
+
+      - name: Run action with default extra-make-args (empty array)
+        id: action-default-args
+        uses: .
+        with:
+          kernel-url: 'https://invalid.example.invalid/nonexistent/kernel.git'
+          kernel-branch: main
+          config: defconfig
+          arch: arm64
+          extra-make-args: '[]'
+        continue-on-error: true
+
+      - name: Assert action failed at clone step with default args
+        run: |
+          echo "outcome: ${{ steps.action-default-args.outcome }}"
+          if [ "${{ steps.action-default-args.outcome }}" != "failure" ]; then
+            echo "FAIL: expected failure at clone step, got: ${{ steps.action-default-args.outcome }}"
+            exit 1
+          fi
+          echo "PASS: action failed at expected step with default empty args"

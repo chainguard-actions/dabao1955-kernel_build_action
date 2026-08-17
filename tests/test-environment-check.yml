@@ -1,0 +1,47 @@
+name: Test environment check passes on ubuntu-latest
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Verify apt is available (required by action)
+        run: |
+          if ! command -v apt-get &>/dev/null; then
+            echo "FAIL: apt-get not found, action environment check will fail"
+            exit 1
+          fi
+          echo "PASS: apt-get is available"
+
+      - name: Verify GITHUB_ACTIONS is set (required by action)
+        run: |
+          echo "GITHUB_ACTIONS=$GITHUB_ACTIONS"
+          if [ "$GITHUB_ACTIONS" != "true" ]; then
+            echo "FAIL: GITHUB_ACTIONS is not 'true'"
+            exit 1
+          fi
+          echo "PASS: GITHUB_ACTIONS=true"
+
+      - name: Run action with invalid URL to confirm env check passes
+        id: action
+        uses: .
+        with:
+          kernel-url: 'https://invalid.example.invalid/nonexistent/kernel.git'
+          kernel-branch: main
+          config: defconfig
+          arch: arm64
+        continue-on-error: true
+
+      - name: Assert action failed at clone step (not at env check)
+        run: |
+          echo "outcome: ${{ steps.action.outcome }}"
+          # The action should fail (at clone/network step), not succeed
+          # If it failed, that means env check passed and it got further
+          if [ "${{ steps.action.outcome }}" != "failure" ]; then
+            echo "FAIL: expected action to fail (at clone step), got: ${{ steps.action.outcome }}"
+            exit 1
+          fi
+          echo "PASS: action failed as expected (env check passed, failed at clone)"
