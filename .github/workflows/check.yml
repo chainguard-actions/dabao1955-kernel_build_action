@@ -1,0 +1,44 @@
+name: Lint Check
+on:
+  pull_request:
+  push:
+    branches: main
+    paths:
+      - 'lxc/*.sh'
+      - '.github/workflows/check.yml'
+      - 'kernelsu/*.sh'
+      - 'rekernel/*.sh'
+
+jobs:
+
+  sh-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        lint: [shellcheck, shfmt]
+
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: ShellCheck lint
+        if: matrix.lint == 'shellcheck'
+        uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
+
+      - name: shfmt lint
+        if: matrix.lint == 'shfmt'
+        run: |
+            export HOST_ARCH=$(dpkg --print-architecture)
+            case ${HOST_ARCH} in
+                armv7* | armv8l | armhf | arm) aria2c https://github.com/mvdan/sh/releases/download/v3.11.0/shfmt_v3.11.0_linux_arm -o shfmt ;;
+                i*86 | x86) aria2c https://github.com/mvdan/sh/releases/download/v3.11.0/shfmt_v3.14.0_linux_x86 -o shfmt ;;
+                amd64 | x86_64) aria2c https://github.com/mvdan/sh/releases/download/v3.11.0/shfmt_v3.11.0_linux_amd64 -o shfmt ;;
+                aarch64 | arm64) aria2c https://github.com/mvdan/sh/releases/download/v3.11.0/shfmt_v3.11.0_linux_arm64 -o shfmt ;;
+
+                *) echo "Unknow cpu architecture for this device !" && exit 1 ;;
+            esac
+            chmod 755 -R ./shfmt
+            ./shfmt -w -i 2 $(find -name *.sh)
+
+

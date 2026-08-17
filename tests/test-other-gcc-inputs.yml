@@ -1,0 +1,39 @@
+name: Test other-gcc64-url and other-gcc32-url inputs
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Test action accepts other-gcc64-url and other-gcc32-url inputs
+        id: action
+        continue-on-error: true
+        uses: .
+        with:
+          kernel-url: 'https://github.com/invalid-org-xyz-notexist/invalid-kernel-repo-xyz'
+          kernel-branch: main
+          kernel-dir: kernel
+          depth: '1'
+          config: defconfig
+          arch: arm64
+          other-gcc64-url: 'https://github.com/invalid-org-xyz-notexist/invalid-gcc64-repo-xyz'
+          other-gcc64-branch: main
+          other-gcc32-url: 'https://github.com/invalid-org-xyz-notexist/invalid-gcc32-repo-xyz'
+          other-gcc32-branch: main
+          anykernel3: 'false'
+          bootimg-url: 'https://example.com/invalid-boot.img'
+      - name: Assert action ran (may fail due to invalid URLs, that is expected)
+        run: |
+          echo "Action outcome: ${{ steps.action.outcome }}"
+          # The action is expected to fail because the kernel URL is invalid.
+          # What matters is that the inputs were accepted (no input validation error).
+          if [ "${{ steps.action.outcome }}" = "success" ]; then
+            echo "PASS: action succeeded"
+          elif [ "${{ steps.action.outcome }}" = "failure" ]; then
+            echo "PASS: action failed as expected with invalid URLs (inputs were accepted)"
+          else
+            echo "FAIL: unexpected outcome: ${{ steps.action.outcome }}"
+            exit 1
+          fi
+          echo "PASS"

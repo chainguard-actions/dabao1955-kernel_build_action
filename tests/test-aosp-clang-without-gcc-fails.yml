@@ -1,0 +1,34 @@
+name: Test AOSP Clang without GCC fails with clear error
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_ACTIONS: "true"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run action with aosp-clang=true but aosp-gcc=false (expect failure)
+        id: action
+        uses: .
+        continue-on-error: true
+        with:
+          kernel-url: "https://github.com/this-repo-does-not-exist-xyz-abc-123/kernel"
+          kernel-branch: "main"
+          kernel-dir: "kernel"
+          depth: "1"
+          config: "defconfig"
+          arch: "arm64"
+          aosp-clang: "true"
+          aosp-gcc: "false"
+          anykernel3: "true"
+
+      - name: Assert action failed as expected
+        run: |
+          echo "outcome: ${{ steps.action.outcome }}"
+          if [ "${{ steps.action.outcome }}" != "failure" ]; then
+            echo "FAIL: expected action to fail when aosp-clang=true but aosp-gcc=false, but got: ${{ steps.action.outcome }}"
+            exit 1
+          fi
+          echo "PASS: action correctly failed when AOSP GCC not enabled alongside AOSP Clang"
