@@ -1,0 +1,48 @@
+{
+  "name": "kernel-build-action",
+  "version": "1.10.3",
+  "description": "Android Kernel Build Action",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --minify --platform=node --target=node24 --outfile=dist/index.js && esbuild src/post.ts --bundle  --minify --platform=node --target=node24 --outfile=dist/post/index.js --format=cjs",
+    "lint": "eslint src/**/*.ts",
+    "format": "prettier --write src/**/*.ts",
+    "format:check": "prettier --check src/**/*.ts",
+    "test": "vitest --coverage",
+    "biome": "biome lint src/",
+    "biome:fix": "biome lint --write src/"
+  },
+  "dependencies": {
+    "@actions/artifact": "^6.2.1",
+    "@actions/cache": "^6.2.0",
+    "@actions/core": "^3.0.1",
+    "@actions/exec": "^3.0.0",
+    "@actions/github": "^9.1.1",
+    "@actions/tool-cache": "^4.0.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.9",
+    "@eslint/js": "^10.0.0",
+    "@types/node": "^26.2.0",
+    "@typescript-eslint/eslint-plugin": "^8.67.0",
+    "@typescript-eslint/parser": "^8.67.0",
+    "@vitest/coverage-v8": "4.1.10",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.8.1",
+    "prettier": "^3.9.6",
+    "typescript": "^6.0.3",
+    "vitest": "4.1.10"
+  },
+  "resolutions": {
+    "**/@actions/glob": "0.7.0",
+    "**/@actions/glob/**/minimatch": "10.2.6",
+    "**/@actions/glob/**/brace-expansion": "5.0.9",
+    "**/readdir-glob/**/minimatch": "9.0.7",
+    "**/readdir-glob/**/brace-expansion": "5.0.9",
+    "**/glob/**/minimatch": "9.0.7",
+    "**/glob/**/brace-expansion": "5.0.9",
+    "**/@eslint/config-array/**/brace-expansion": "5.0.9",
+    "**/@typescript-eslint/**/brace-expansion": "5.0.9",
+    "**/eslint/**/brace-expansion": "5.0.9"
+  }
+}

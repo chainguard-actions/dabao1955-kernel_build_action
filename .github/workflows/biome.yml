@@ -1,0 +1,43 @@
+name: Biome Lint
+permissions:
+  contents: read
+  packages: read
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/biome.yml'
+      - 'src/**/*.ts'
+      - '__tests__/**/*.ts'
+      - 'biome.json'
+      - 'package.json'
+      - 'yarn.lock'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/biome.yml'
+      - 'src/**/*.ts'
+      - '__tests__/**/*.ts'
+      - 'biome.json'
+      - 'package.json'
+      - 'yarn.lock'
+
+jobs:
+  biome:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '20'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Run Biome
+        run: yarn biome
