@@ -1,0 +1,37 @@
+name: Test invalid local kernel path (not a kernel source)
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Create a non-kernel directory
+        run: |
+          mkdir -p /tmp/not-a-kernel
+          echo "This is not a kernel" > /tmp/not-a-kernel/README.md
+
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          # Local path ending with / triggers local kernel path detection
+          kernel-url: /tmp/not-a-kernel/
+          arch: arm64
+
+      - name: Assert action failed with invalid kernel source error
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          if [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action correctly rejected invalid local kernel source"
+          elif [ "$OUTCOME" = "success" ]; then
+            echo "FAIL: action should have rejected invalid local kernel source"
+            exit 1
+          else
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi

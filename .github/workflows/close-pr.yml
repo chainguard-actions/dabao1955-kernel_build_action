@@ -1,0 +1,42 @@
+name: Auto Close PR on build.yml Change
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/build.yml'
+
+jobs:
+  auto-close:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Close PR
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              state: 'closed'
+            });
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: "🚫 This PR has been automatically closed because it modifies `.github/workflows/build.yml`.\n\nThis workflow file is a usage example and should not be modified as part of the Action logic."
+            });            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              state: 'closed'
+            });
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: "This PR has been automatically closed because it modifies `.github/workflows/build.yml`, which is a usage example, not part of the Action logic."
+            });

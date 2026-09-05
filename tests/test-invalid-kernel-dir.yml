@@ -1,0 +1,32 @@
+name: Test invalid kernel-dir (path traversal rejection)
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          kernel-url: https://github.com/torvalds/linux
+          kernel-dir: ../evil
+          arch: arm64
+
+      - name: Assert action failed with path traversal error
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          if [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action correctly rejected path traversal in kernel-dir"
+          elif [ "$OUTCOME" = "success" ]; then
+            echo "FAIL: action should have rejected path traversal in kernel-dir"
+            exit 1
+          else
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi

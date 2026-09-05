@@ -1,0 +1,26 @@
+name: Python Test
+on:
+  pull_request:
+  push:
+    paths:
+      - '.github/workflows/pytest.yml'
+      - '**/*.py'
+      - 'pyproject.toml'
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Setup Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.13'
+      - name: Install dependencies
+        run: |
+          pip install pytest pytest-cov pytest-mock
+          sudo apt update && sudo apt install coccinelle -y
+      - name: Run pytest
+        run: python3 -m pytest
