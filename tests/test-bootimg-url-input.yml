@@ -1,4 +1,4 @@
-name: Test anykernel3-url input
+name: Test bootimg-url input
 on:
   workflow_dispatch:
 jobs:
@@ -16,15 +16,14 @@ jobs:
           depth: '1'
           config: defconfig
           arch: arm64
-          anykernel3: 'true'
-          anykernel3-url: https://github.com/osm0sis/AnyKernel3
-      - name: Assert action ran (anykernel3-url input accepted)
+          bootimg-url: https://example.com/boot.img
+      - name: Assert action ran (bootimg-url input accepted)
         env:
           OUTCOME: ${{ steps.action.outcome }}
         run: |
           echo "outcome: $OUTCOME"
           if [ "$OUTCOME" = "success" ] || [ "$OUTCOME" = "failure" ]; then
-            echo "PASS: action ran with anykernel3-url input (outcome: $OUTCOME)"
+            echo "PASS: action ran with bootimg-url input (outcome: $OUTCOME)"
           else
             echo "FAIL: unexpected outcome '$OUTCOME'"
             exit 1
