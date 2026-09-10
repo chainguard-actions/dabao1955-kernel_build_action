@@ -10,13 +10,16 @@ jobs:
         uses: .
         continue-on-error: true
         with:
-          kernel-url: https://github.com/torvalds/linux
-          kernel-branch: master
+          kernel-url: 'https://github.com/torvalds/linux'
+          kernel-branch: 'master'
+          kernel-dir: 'kernel'
           arch: arm64
+          config: defconfig
           ksu: 'true'
           ksu-other: 'true'
-          ksu-url: https://github.com/tiann/KernelSU
-      - name: Assert action ran (inputs accepted or failed gracefully)
+          ksu-url: 'https://github.com/tiann/KernelSU'
+          ksu-version: 'main'
+      - name: Assert action ran (ksu-url input accepted)
         env:
           OUTCOME: ${{ steps.action.outcome }}
         run: |
