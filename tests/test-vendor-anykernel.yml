@@ -1,4 +1,4 @@
-name: Test custom toolchain options
+name: Test vendor and anykernel3 options
 on:
   workflow_dispatch:
 jobs:
@@ -16,12 +16,13 @@ jobs:
           depth: '1'
           config: 'defconfig'
           arch: 'arm64'
-          other-clang-url: 'https://github.com/llvm/llvm-project'
-          other-clang-branch: 'main'
-          other-gcc64-url: 'https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9'
-          other-gcc64-branch: 'lineage-19.1'
-          other-gcc32-url: 'https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9'
-          other-gcc32-branch: 'lineage-19.1'
+          vendor: 'true'
+          vendor-url: 'https://github.com/torvalds/linux'
+          vendor-branch: 'master'
+          vendor-dir: 'vendor'
+          anykernel3: 'true'
+          anykernel3-url: 'https://github.com/osm0sis/AnyKernel3'
+          bootimg-url: 'https://example.com/boot.img'
       - name: Assert action ran or failed gracefully
         env:
           OUTCOME: ${{ steps.action.outcome }}
