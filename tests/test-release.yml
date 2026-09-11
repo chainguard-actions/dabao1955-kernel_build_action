@@ -1,4 +1,4 @@
-name: Test release and packaging inputs
+name: Test release with AnyKernel3 URL, boot image URL, and access token
 on:
   workflow_dispatch:
 jobs:
@@ -6,20 +6,34 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Create minimal kernel source directory
+        run: |
+          mkdir -p /tmp/kernel-src
+          cat > /tmp/kernel-src/Makefile << 'EOF'
+          VERSION = 5
+          PATCHLEVEL = 15
+          SUBLEVEL = 0
+          EOF
+          echo "Kernel source directory created"
       - id: action
-        continue-on-error: true
         uses: .
         with:
-          kernel-url: https://github.com/torvalds/linux
-          kernel-branch: master
+          kernel-url: /tmp/kernel-src
+          kernel-dir: kernel
           config: defconfig
           arch: arm64
+          depth: '1'
           anykernel3: 'true'
           anykernel3-url: https://github.com/osm0sis/AnyKernel3
           bootimg-url: https://example.com/boot.img
           release: 'false'
-          access-token: fake-token-for-testing
-      - name: Assert action was invoked
+          access-token: ${{ github.token }}
+        continue-on-error: true
+      - name: Assert action ran with release inputs
         run: |
-          echo "Action step completed (may have failed due to environment constraints)"
-          echo "PASS: anykernel3-url, bootimg-url, access-token inputs were accepted"
+          echo "Action outcome: ${{ steps.action.outcome }}"
+          if [ "${{ steps.action.outcome }}" = "skipped" ]; then
+            echo "FAIL: action was skipped unexpectedly"
+            exit 1
+          fi
+          echo "PASS: action ran with release inputs (outcome: ${{ steps.action.outcome }})"

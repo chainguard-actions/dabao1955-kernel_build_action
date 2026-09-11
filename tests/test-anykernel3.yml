@@ -1,4 +1,4 @@
-name: Test basic usage - local kernel path
+name: Test AnyKernel3 packaging option
 on:
   workflow_dispatch:
 jobs:
@@ -9,7 +9,6 @@ jobs:
       - name: Create minimal kernel source directory
         run: |
           mkdir -p /tmp/kernel-src
-          # Create a minimal Makefile so the action can find a kernel source
           cat > /tmp/kernel-src/Makefile << 'EOF'
           VERSION = 5
           PATCHLEVEL = 15
@@ -24,14 +23,13 @@ jobs:
           config: defconfig
           arch: arm64
           depth: '1'
+          anykernel3: 'true'
         continue-on-error: true
-      - name: Assert action ran
+      - name: Assert action ran with AnyKernel3 enabled
         run: |
           echo "Action outcome: ${{ steps.action.outcome }}"
-          # The action is expected to attempt the build; it may fail due to missing
-          # toolchain/config but should not crash with an unhandled exception
           if [ "${{ steps.action.outcome }}" = "skipped" ]; then
             echo "FAIL: action was skipped unexpectedly"
             exit 1
           fi
-          echo "PASS: action ran (outcome: ${{ steps.action.outcome }})"
+          echo "PASS: action ran with AnyKernel3 enabled (outcome: ${{ steps.action.outcome }})"
