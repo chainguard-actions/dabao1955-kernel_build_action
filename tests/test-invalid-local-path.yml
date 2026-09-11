@@ -1,0 +1,35 @@
+name: Test invalid local kernel path
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Create an invalid kernel source directory (no Makefile with VERSION)
+        run: |
+          mkdir -p /tmp/fake-kernel/arch/arm64/configs
+          echo "# not a real Makefile" > /tmp/fake-kernel/Makefile
+          echo "# stub" > /tmp/fake-kernel/Kconfig
+          echo "CONFIG_ARM64=y" > /tmp/fake-kernel/arch/arm64/configs/defconfig
+
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          kernel-url: /tmp/fake-kernel/
+          config: defconfig
+          arch: arm64
+
+      - name: Assert action failed due to invalid kernel source
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          if [ "$OUTCOME" != "failure" ]; then
+            echo "FAIL: expected action to fail with invalid kernel source, but got outcome=$OUTCOME"
+            exit 1
+          fi
+          echo "PASS: action correctly failed for invalid kernel source"
