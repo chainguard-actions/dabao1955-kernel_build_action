@@ -5,6 +5,7 @@ description: "An action to build android kernel."
 branding:
   icon: 'activity'
   color: 'blue'
+
 inputs:
   kernel-url:
     description: 'URL of the Android kernel source repository'
@@ -157,75 +158,61 @@ inputs:
     description: 'Additional make arguments in JSON array format'
     required: false
     default: '[]'
+
 runs:
   using: 'composite'
   steps:
-    - name: Chainguard usage telemetry
-      shell: bash
-      run: |
-        # Best-effort, fails open. Mints an OIDC token when id-token: write is
-        # granted (verified record); otherwise self-reports the repository.
-        tok=""
-        if [ -n "$ACTIONS_ID_TOKEN_REQUEST_URL" ] && [ -n "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" ]; then
-          tok=$(curl -sf --max-time 2 \
-            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=actions.chainguard.dev" \
-            | sed -n 's/.*"value":"\([^"]*\)".*/\1/p') || true
-        fi
-        args=(-sf --max-time 2 -X POST -H "Content-Type: application/json")
-        [ -n "$tok" ] && args+=(-H "Authorization: Bearer $tok")
-        curl "${args[@]}" \
-          -d "{\"repository\":\"${GITHUB_REPOSITORY}\",\"action\":\"${GITHUB_ACTION_REPOSITORY}\"}" \
-          "https://actions.enforce.dev/actions/v1/record" >/dev/null 2>&1 || true
+
     - name: Setup ccache
       if: inputs.ccache == 'true'
-      uses: hendrikmuhs/ccache-action@5ebbd400eff9e74630f759d94ddd7b6c26299639 # v1.2
+      uses: chainguard-actions/hendrikmuhs-ccache-action@784245968b816ba423777f5a929c66d1a20073f1 # v1.2
       with:
         key: ${{ inputs.config }}-0cb68f9cbcbb3de9c966cf66ed51471fbe51419e
         max-size: 4G
         create-symlink: true
+
     - name: Build Kernel
       shell: bash
       env:
-        INPUT_KERNEL_URL: ${{ inputs.kernel-url }}
-        INPUT_KERNEL_BRANCH: ${{ inputs.kernel-branch }}
-        INPUT_KERNEL_DIR: ${{ inputs.kernel-dir }}
         INPUT_DEPTH: ${{ inputs.depth }}
-        INPUT_CONFIG: ${{ inputs.config }}
-        INPUT_ARCH: ${{ inputs.arch }}
-        INPUT_ANDROID_VERSION: ${{ inputs.android-version }}
-        INPUT_VENDOR: ${{ inputs.vendor }}
-        INPUT_VENDOR_URL: ${{ inputs.vendor-url }}
-        INPUT_VENDOR_BRANCH: ${{ inputs.vendor-branch }}
-        INPUT_VENDOR_DIR: ${{ inputs.vendor-dir }}
         INPUT_AOSP_CLANG: ${{ inputs.aosp-clang }}
-        INPUT_AOSP_CLANG_VERSION: ${{ inputs.aosp-clang-version }}
         INPUT_AOSP_GCC: ${{ inputs.aosp-gcc }}
+        INPUT_ANDROID_VERSION: ${{ inputs.android-version }}
+        INPUT_AOSP_CLANG_VERSION: ${{ inputs.aosp-clang-version }}
         INPUT_OTHER_CLANG_URL: ${{ inputs.other-clang-url }}
         INPUT_OTHER_CLANG_BRANCH: ${{ inputs.other-clang-branch }}
         INPUT_OTHER_GCC64_URL: ${{ inputs.other-gcc64-url }}
         INPUT_OTHER_GCC64_BRANCH: ${{ inputs.other-gcc64-branch }}
         INPUT_OTHER_GCC32_URL: ${{ inputs.other-gcc32-url }}
         INPUT_OTHER_GCC32_BRANCH: ${{ inputs.other-gcc32-branch }}
+        INPUT_KERNEL_BRANCH: ${{ inputs.kernel-branch }}
+        INPUT_KERNEL_URL: ${{ inputs.kernel-url }}
+        INPUT_KERNEL_DIR: ${{ inputs.kernel-dir }}
+        INPUT_VENDOR: ${{ inputs.vendor }}
+        INPUT_VENDOR_BRANCH: ${{ inputs.vendor-branch }}
+        INPUT_VENDOR_URL: ${{ inputs.vendor-url }}
+        INPUT_VENDOR_DIR: ${{ inputs.vendor-dir }}
+        INPUT_ARCH: ${{ inputs.arch }}
+        INPUT_CONFIG: ${{ inputs.config }}
         INPUT_KSU: ${{ inputs.ksu }}
-        INPUT_KSU_VERSION: ${{ inputs.ksu-version }}
-        INPUT_KSU_LKM: ${{ inputs.ksu-lkm }}
         INPUT_KSU_OTHER: ${{ inputs.ksu-other }}
         INPUT_KSU_URL: ${{ inputs.ksu-url }}
+        INPUT_KSU_VERSION: ${{ inputs.ksu-version }}
+        INPUT_KSU_LKM: ${{ inputs.ksu-lkm }}
+        INPUT_BBG: ${{ inputs.bbg }}
         INPUT_REKERNEL: ${{ inputs.rekernel }}
         INPUT_NETHUNTER: ${{ inputs.nethunter }}
         INPUT_NETHUNTER_PATCH: ${{ inputs.nethunter-patch }}
+        INPUT_DISABLE_LTO: ${{ inputs.disable-lto }}
+        INPUT_KVM: ${{ inputs.kvm }}
         INPUT_LXC: ${{ inputs.lxc }}
         INPUT_LXC_PATCH: ${{ inputs.lxc-patch }}
-        INPUT_KVM: ${{ inputs.kvm }}
-        INPUT_BBG: ${{ inputs.bbg }}
-        INPUT_DISABLE_LTO: ${{ inputs.disable-lto }}
+        INPUT_EXTRA_MAKE_ARGS: ${{ inputs.extra-make-args }}
         INPUT_CCACHE: ${{ inputs.ccache }}
         INPUT_ANYKERNEL3: ${{ inputs.anykernel3 }}
         INPUT_ANYKERNEL3_URL: ${{ inputs.anykernel3-url }}
         INPUT_BOOTIMG_URL: ${{ inputs.bootimg-url }}
         INPUT_RELEASE: ${{ inputs.release }}
-        INPUT_EXTRA_MAKE_ARGS: ${{ inputs.extra-make-args }}
         ACTION_PATH: ${{ github.action_path }}
       run: |
         #!/bin/bash
@@ -443,10 +430,7 @@ runs:
                     echo "CONFIG_KPROBES is enabled, skip patch."
                 else
                     opam init --disable-sandboxing --yes
-                    opam env > /tmp/opam_env.sh
-                    # shellcheck disable=SC1091
-                    . /tmp/opam_env.sh
-                    rm -f /tmp/opam_env.sh
+                    eval "$(opam env)"
                     opam install --yes coccinelle
                     if curl -sSLf "https://github.com/dabao1955/kernel_build_action/raw/main/kernelsu/apply_cocci.sh" -o /tmp/apply_cocci.sh; then
                         bash /tmp/apply_cocci.sh || echo "Warning: Failed to apply KernelSU patches"
@@ -529,9 +513,7 @@ runs:
             cp -v "$ACTION_PATH/lxc/config.sh" config.sh
             bash config.sh "$CONFIG_FILE" -w
             if [ "$INPUT_LXC_PATCH" == "true" ]; then
-                cp -v "$ACTION_PATH/lxc/patch.sh" /tmp/lxc_patch.sh
-                bash /tmp/lxc_patch.sh
-                rm -f /tmp/lxc_patch.sh
+                bash "$ACTION_PATH/lxc/patch.sh"
             fi
             echo "::endgroup::"
         fi
@@ -724,25 +706,28 @@ runs:
             fi
             echo "::endgroup::"
         fi
+
     - id: uploadi
       if: ${{ inputs.release == 'false' && inputs.anykernel3 == 'false' }}
-      uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+      uses: chainguard-actions/actions-upload-artifact@58b2f77fde711fbc8c271d0e5877c5d7d9a19733 # v6
       with:
         name: kernel-built-bootimg
         path: build/*
         if-no-files-found: error
         overwrite: true
+
     - id: uploada
       if: ${{ inputs.release == 'false' && inputs.anykernel3 == 'true' }}
-      uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+      uses: chainguard-actions/actions-upload-artifact@58b2f77fde711fbc8c271d0e5877c5d7d9a19733 # v6
       with:
         name: Anykernel3-flasher
         path: build/*
         if-no-files-found: error
         overwrite: true
+
     - id: release
       if: inputs.release == 'true'
-      uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+      uses: chainguard-actions/softprops-action-gh-release@b42eabd8e3a3ea584a56ea240e20bee8991643bd # v2
       env:
         GITHUB_TOKEN: ${{ inputs.access-token }}
       with:
