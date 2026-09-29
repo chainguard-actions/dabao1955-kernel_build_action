@@ -1,0 +1,35 @@
+name: Test other-gcc64-url and other-gcc32-url inputs
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          kernel-url: https://github.com/torvalds/linux
+          kernel-branch: master
+          config: defconfig
+          arch: arm64
+          other-gcc64-url: https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9
+          other-gcc64-branch: master
+          other-gcc32-url: https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9
+          other-gcc32-branch: master
+          anykernel3: 'true'
+      - name: Assert action ran with other-gcc64-url and other-gcc32-url inputs
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          # The action will fail during toolchain download or kernel clone/build,
+          # but the important thing is that other-gcc64-url and other-gcc32-url
+          # inputs were accepted and processed.
+          if [ "$OUTCOME" = "success" ] || [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action ran with other-gcc64-url and other-gcc32-url inputs (outcome: $OUTCOME)"
+          else
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi

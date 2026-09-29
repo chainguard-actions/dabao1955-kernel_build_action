@@ -174,45 +174,45 @@ runs:
     - name: Build Kernel
       shell: bash
       env:
+        INPUT_KERNEL_URL: ${{ inputs.kernel-url }}
+        INPUT_KERNEL_BRANCH: ${{ inputs.kernel-branch }}
+        INPUT_KERNEL_DIR: ${{ inputs.kernel-dir }}
         INPUT_DEPTH: ${{ inputs.depth }}
-        INPUT_AOSP_CLANG: ${{ inputs.aosp-clang }}
-        INPUT_AOSP_GCC: ${{ inputs.aosp-gcc }}
+        INPUT_CONFIG: ${{ inputs.config }}
+        INPUT_ARCH: ${{ inputs.arch }}
         INPUT_ANDROID_VERSION: ${{ inputs.android-version }}
+        INPUT_VENDOR: ${{ inputs.vendor }}
+        INPUT_VENDOR_URL: ${{ inputs.vendor-url }}
+        INPUT_VENDOR_BRANCH: ${{ inputs.vendor-branch }}
+        INPUT_VENDOR_DIR: ${{ inputs.vendor-dir }}
+        INPUT_AOSP_CLANG: ${{ inputs.aosp-clang }}
         INPUT_AOSP_CLANG_VERSION: ${{ inputs.aosp-clang-version }}
+        INPUT_AOSP_GCC: ${{ inputs.aosp-gcc }}
         INPUT_OTHER_CLANG_URL: ${{ inputs.other-clang-url }}
         INPUT_OTHER_CLANG_BRANCH: ${{ inputs.other-clang-branch }}
         INPUT_OTHER_GCC64_URL: ${{ inputs.other-gcc64-url }}
         INPUT_OTHER_GCC64_BRANCH: ${{ inputs.other-gcc64-branch }}
         INPUT_OTHER_GCC32_URL: ${{ inputs.other-gcc32-url }}
         INPUT_OTHER_GCC32_BRANCH: ${{ inputs.other-gcc32-branch }}
-        INPUT_KERNEL_BRANCH: ${{ inputs.kernel-branch }}
-        INPUT_KERNEL_URL: ${{ inputs.kernel-url }}
-        INPUT_KERNEL_DIR: ${{ inputs.kernel-dir }}
-        INPUT_VENDOR: ${{ inputs.vendor }}
-        INPUT_VENDOR_BRANCH: ${{ inputs.vendor-branch }}
-        INPUT_VENDOR_URL: ${{ inputs.vendor-url }}
-        INPUT_VENDOR_DIR: ${{ inputs.vendor-dir }}
-        INPUT_ARCH: ${{ inputs.arch }}
-        INPUT_CONFIG: ${{ inputs.config }}
         INPUT_KSU: ${{ inputs.ksu }}
-        INPUT_KSU_OTHER: ${{ inputs.ksu-other }}
-        INPUT_KSU_URL: ${{ inputs.ksu-url }}
         INPUT_KSU_VERSION: ${{ inputs.ksu-version }}
         INPUT_KSU_LKM: ${{ inputs.ksu-lkm }}
-        INPUT_BBG: ${{ inputs.bbg }}
+        INPUT_KSU_OTHER: ${{ inputs.ksu-other }}
+        INPUT_KSU_URL: ${{ inputs.ksu-url }}
         INPUT_REKERNEL: ${{ inputs.rekernel }}
         INPUT_NETHUNTER: ${{ inputs.nethunter }}
         INPUT_NETHUNTER_PATCH: ${{ inputs.nethunter-patch }}
-        INPUT_DISABLE_LTO: ${{ inputs.disable-lto }}
-        INPUT_KVM: ${{ inputs.kvm }}
         INPUT_LXC: ${{ inputs.lxc }}
         INPUT_LXC_PATCH: ${{ inputs.lxc-patch }}
-        INPUT_EXTRA_MAKE_ARGS: ${{ inputs.extra-make-args }}
+        INPUT_KVM: ${{ inputs.kvm }}
+        INPUT_BBG: ${{ inputs.bbg }}
+        INPUT_DISABLE_LTO: ${{ inputs.disable-lto }}
         INPUT_CCACHE: ${{ inputs.ccache }}
         INPUT_ANYKERNEL3: ${{ inputs.anykernel3 }}
         INPUT_ANYKERNEL3_URL: ${{ inputs.anykernel3-url }}
         INPUT_BOOTIMG_URL: ${{ inputs.bootimg-url }}
         INPUT_RELEASE: ${{ inputs.release }}
+        INPUT_EXTRA_MAKE_ARGS: ${{ inputs.extra-make-args }}
         ACTION_PATH: ${{ github.action_path }}
       run: |
         #!/bin/bash
@@ -393,7 +393,7 @@ runs:
             NONGKI=true
         fi
 
-        CONFIG_FILE="arch/$INPUT_ARCH/configs/$INPUT_CONFIG"
+        CONFIG_FILE="arch/${INPUT_ARCH}/configs/${INPUT_CONFIG}"
         if [ "$INPUT_KSU" == "true" ]; then
             echo "::group::Initializing KernelSU"
             if [ -f KernelSU/kernel/Kconfig ]; then
@@ -411,7 +411,7 @@ runs:
                 echo "Kernel version: $VERSION.$PATCHLEVEL.$SUBLEVEL"
                 KVER="$INPUT_KSU_VERSION"
                 if [ "$NONGKI" == "true" ] && [ "$INPUT_KSU_OTHER" == "false" ]; then
-                    echo "Warning: The KernelSU version you selected was detected to be $INPUT_KSU_VERSION, but KernelSU has dropped support for the non-gki kernel since 0.9.5."
+                    echo "Warning: The KernelSU version you selected was detected to be ${INPUT_KSU_VERSION}, but KernelSU has dropped support for the non-gki kernel since 0.9.5."
                     echo "This will force switch to v0.9.5."
                     KVER=v0.9.5
                 fi
@@ -430,8 +430,7 @@ runs:
                     echo "CONFIG_KPROBES is enabled, skip patch."
                 else
                     opam init --disable-sandboxing --yes
-                    eval "$(opam env)"
-                    opam install --yes coccinelle
+                    opam exec -- opam install --yes coccinelle
                     if curl -sSLf "https://github.com/dabao1955/kernel_build_action/raw/main/kernelsu/apply_cocci.sh" -o /tmp/apply_cocci.sh; then
                         bash /tmp/apply_cocci.sh || echo "Warning: Failed to apply KernelSU patches"
                         rm -f /tmp/apply_cocci.sh
@@ -622,7 +621,7 @@ runs:
             find_kernel_image() {
                 local pattern=$1
                 local description=$2
-                mapfile -t images < <(find "../out/arch/$INPUT_ARCH/boot" -name "$pattern" ! -name "*-*" 2>/dev/null)
+                mapfile -t images < <(find "../out/arch/${INPUT_ARCH}/boot" -name "$pattern" ! -name "*-*" 2>/dev/null)
 
                 if [ ${#images[@]} -eq 0 ]; then
                     error "Failed to find $description"
@@ -662,7 +661,7 @@ runs:
             copy_kernel_image() {
                 local pattern=$1
                 local description=$2
-                mapfile -t images < <(find "out/arch/$INPUT_ARCH/boot" -name "$pattern" ! -name "*-*" 2>/dev/null)
+                mapfile -t images < <(find "out/arch/${INPUT_ARCH}/boot" -name "$pattern" ! -name "*-*" 2>/dev/null)
 
                 if [ ${#images[@]} -eq 0 ]; then
                     return 1
@@ -676,23 +675,23 @@ runs:
 
             if ! copy_kernel_image "Image.*-dtb" "kernel Image with dtb"; then
                 if ! copy_kernel_image "Image.*" "compressed kernel Image"; then
-                    if [ ! -f "out/arch/$INPUT_ARCH/boot/Image" ]; then
-                        error "Kernel Image not found in out/arch/$INPUT_ARCH/boot/"
+                    if [ ! -f "out/arch/${INPUT_ARCH}/boot/Image" ]; then
+                        error "Kernel Image not found in out/arch/${INPUT_ARCH}/boot/"
                     fi
-                    cp "out/arch/$INPUT_ARCH/boot/Image" AnyKernel3/ -rv
+                    cp "out/arch/${INPUT_ARCH}/boot/Image" AnyKernel3/ -rv
                 fi
             fi
 
-            if [ -f "out/arch/$INPUT_ARCH/boot/dtbo.img" ]; then
-                cp "out/arch/$INPUT_ARCH/boot/dtbo.img" AnyKernel3/ -rv
+            if [ -f "out/arch/${INPUT_ARCH}/boot/dtbo.img" ]; then
+                cp "out/arch/${INPUT_ARCH}/boot/dtbo.img" AnyKernel3/ -rv
             else
                 echo "Failed to copy DTBO image. File not found."
             fi
 
-            if [ -f "out/arch/$INPUT_ARCH/boot/dtb.img" ]; then
-                cp "out/arch/$INPUT_ARCH/boot/dtb.img" AnyKernel3/ -rv
-            elif [ -f "out/arch/$INPUT_ARCH/boot/dtb" ]; then
-                cp "out/arch/$INPUT_ARCH/boot/dtb" AnyKernel3/ -rv
+            if [ -f "out/arch/${INPUT_ARCH}/boot/dtb.img" ]; then
+                cp "out/arch/${INPUT_ARCH}/boot/dtb.img" AnyKernel3/ -rv
+            elif [ -f "out/arch/${INPUT_ARCH}/boot/dtb" ]; then
+                cp "out/arch/${INPUT_ARCH}/boot/dtb" AnyKernel3/ -rv
             else
                 echo "Failed to copy dtb. File not found."
             fi

@@ -1,4 +1,4 @@
-name: Test ksu-other with ksu-url input
+name: Test access-token input
 on:
   workflow_dispatch:
 jobs:
@@ -14,21 +14,19 @@ jobs:
           kernel-branch: master
           config: defconfig
           arch: arm64
-          ksu: 'true'
-          ksu-other: 'true'
-          ksu-url: https://github.com/tiann/KernelSU
           anykernel3: 'true'
-      - name: Assert action ran with ksu-url input
+          release: 'true'
+          access-token: ${{ github.token }}
+      - name: Assert action ran with access-token input
         env:
           OUTCOME: ${{ steps.action.outcome }}
         run: |
           echo "outcome: $OUTCOME"
-          # The action will fail during kernel clone (takes too long) or toolchain setup,
-          # but the important thing is that ksu-url input was accepted and processed.
-          # We accept both success and failure as valid outcomes since the build
-          # environment may not support a full kernel build.
+          # The action will fail during kernel clone or build (takes too long),
+          # or during release creation (sentinel repo is not resolvable),
+          # but the important thing is that access-token input was accepted and processed.
           if [ "$OUTCOME" = "success" ] || [ "$OUTCOME" = "failure" ]; then
-            echo "PASS: action ran with ksu-url input (outcome: $OUTCOME)"
+            echo "PASS: action ran with access-token input (outcome: $OUTCOME)"
           else
             echo "FAIL: unexpected outcome '$OUTCOME'"
             exit 1

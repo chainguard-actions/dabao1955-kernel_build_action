@@ -10,43 +10,71 @@
 
 **Harden Agent Version:** `2`
 
-Action **dabao1955--kernel_build_action/v1.9.2** was hardened automatically. 79 finding(s) were identified and resolved across 2 iteration(s).
+Action **dabao1955--kernel_build_action/v1.9.2** was hardened automatically. 80 finding(s) were identified and resolved across 2 iteration(s).
 
 ## Findings Fixed
 
 ### script-injection (severity: high)
 
-The 'Build Kernel' run: block in action.yml directly interpolates numerous ${{ inputs.* }} and ${{ github.* }} expressions into shell commands (rule a). This allows an attacker who controls input values to inject arbitrary shell commands. Examples include: `git clone --depth="${{ inputs.depth }}"` (inputs.depth injected into git command), `download_and_extract "${{ inputs.other-clang-url }}"` (URL input injected), `curl -sSLf "${{ inputs.ksu-url }}/raw/${{ inputs.ksu-version }}/kernel/setup.sh"` (ksu-url and ksu-version injected into curl), `jq -r '.[]' <<< "${{ inputs.extra-make-args }}"` (JSON input injected into here-string), `"${{ inputs.config }}"` and `"ARCH=${{ inputs.arch }}"` injected into make_args array, `git clone ... "${{ inputs.kernel-url }}"` (kernel-url injected), `git clone ... "${{ inputs.vendor-url }}"` (vendor-url injected), `curl -sSL "${{ github.action_path }}/lxc/patch.sh" | bash` (github.action_path injected). All ${{ }} expressions inside run: blocks are template-substituted before the shell parses them, enabling shell metacharacter injection.
+The `run:` block in action.yml directly interpolates dozens of `${{ inputs.* }}` and `${{ github.* }}` expressions inside shell commands (sub-rule a). This allows an attacker who controls input values to inject arbitrary shell commands. Key offending lines include: `git clone --depth="${{ inputs.depth }}"` (function body), `git clone -b "${{ inputs.kernel-branch }}" ... "${{ inputs.kernel-url }}"`, `AOSP_CLANG_URL+="android${{ inputs.android-version }}-release/clang-${{ inputs.aosp-clang-version }}.tar.gz"`, `download_and_extract "${{ inputs.other-clang-url }}" ... "${{ inputs.other-clang-branch }}"`, `download_and_extract "${{ inputs.other-gcc64-url }}" ... "${{ inputs.other-gcc64-branch }}"`, `CONFIG_FILE="arch/${{ inputs.arch }}/configs/${{ inputs.config }}"`, `curl -sSLf "${{ inputs.ksu-url }}/raw/${{ inputs.ksu-version }}/kernel/setup.sh"`, `KVER="${{ inputs.ksu-version }}"`, `curl -sSL "${{ github.action_path }}/lxc/patch.sh" | bash`, `jq -r '.[]' <<< "${{ inputs.extra-make-args }}"`, `"${{ inputs.config }}"` and `"ARCH=${{ inputs.arch }}"` in make_args array, `find ../out/arch/${{ inputs.arch }}/boot`, `aria2c "${{ inputs.bootimg-url }}"`, `git clone "${{ inputs.anykernel3-url }}"`. All of these allow shell metacharacter injection via attacker-controlled inputs.
 
 Locations:
 
-- `action.yml:138`
+- `action.yml:131`
+- `action.yml:155`
+- `action.yml:163`
+- `action.yml:167`
+- `action.yml:175`
+- `action.yml:181`
+- `action.yml:191`
+- `action.yml:200`
+- `action.yml:207`
+- `action.yml:218`
+- `action.yml:224`
+- `action.yml:247`
+- `action.yml:257`
+- `action.yml:270`
+- `action.yml:299`
+- `action.yml:308`
+- `action.yml:323`
+- `action.yml:338`
+- `action.yml:356`
+- `action.yml:395`
+- `action.yml:430`
+- `action.yml:450`
+- `action.yml:470`
+- `action.yml:490`
+- `action.yml:510`
+- `action.yml:530`
 
 ### unsafe-shell (severity: high)
 
-Two run: block commands pipe remote content directly to bash without first saving to a file and verifying it:
-1. `curl -Ss https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash` — fetches and executes an external script from a mutable branch (main) of a third-party repository.
-2. `curl -sSLf https://github.com/dabao1955/kernel_build_action/raw/main/rekernel/patch.sh | bash` — fetches and executes an external script from a mutable branch (main) of a repository. Both patterns allow a compromised or attacker-controlled remote server to execute arbitrary code on the runner.
+Three `run:` steps pipe remote content directly to `bash` without first saving to a file for inspection: (1) `curl -Ss https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash` — fetches and executes an unpinned remote script from a third-party repository; (2) `curl -sSLf https://github.com/dabao1955/kernel_build_action/raw/main/rekernel/patch.sh | bash` — fetches and executes an unpinned remote script from the action's own repository on the `main` branch; (3) `curl -sSL "${{ github.action_path }}/lxc/patch.sh" | bash` — pipes a local file through curl to bash (also a script-injection vector via the `${{ github.action_path }}` expression).
 
 Locations:
 
-- `action.yml:283`
-- `action.yml:290`
+- `action.yml:338`
+- `action.yml:344`
+- `action.yml:430`
 
 ### unpinned-uses (severity: high)
 
-All four uses: references in action.yml use mutable version tags instead of immutable 40-character SHA commit hashes, making the action vulnerable to supply-chain attacks if any of these actions are compromised or their tags are moved:
-- `hendrikmuhs/ccache-action@v1.2` (tag)
-- `actions/upload-artifact@v6` (tag, used twice)
-- `softprops/action-gh-release@v2` (tag)
-These should be pinned to full SHA digests, e.g. `actions/upload-artifact@<40-hex-sha> # v6`.
+Three `uses:` references in action.yml are pinned to mutable version tags rather than immutable full 40-character commit SHAs, making them vulnerable to supply-chain attacks if the referenced tag is moved: (1) `hendrikmuhs/ccache-action@v1.2`; (2) `actions/upload-artifact@v6`; (3) `softprops/action-gh-release@v2`. Each should be pinned to a full SHA digest, e.g. `actions/upload-artifact@<40-hex-sha> # v6`.
 
 Locations:
 
-- `action.yml:133`
-- `action.yml:490`
-- `action.yml:498`
-- `action.yml:505`
+- `action.yml:120`
+- `action.yml:618`
+- `action.yml:627`
+- `action.yml:634`
+
+### suspicious-run-content (severity: high)
+
+Sub-check `eval-dynamic`: The `run:` block contains `eval $(opam env)` which uses `eval` with command substitution (`$(...)`) to dynamically construct and execute shell commands. While `opam env` is a standard OCaml package manager command, this pattern matches the eval-dynamic check criterion (`eval` followed by `$(`). If the opam environment or PATH is tampered with, this could execute attacker-controlled code.
+
+Locations:
+
+- `action.yml:360`
 
 ### static-inline-injection (severity: high)
 
@@ -660,29 +688,25 @@ Locations:
 
 ### Iteration 1
 
-**Fixes applied:** unpinned-uses, script-injection, static-inline-injection, unsafe-shell
+**Fixes applied:** unpinned-uses, script-injection, static-inline-injection, unsafe-shell, suspicious-run-content
 
 **Notes:**
 
 Fixed all security findings in hardened/action/action.yml:
 
-1. **unpinned-uses**: Pinned all 4 action references to full commit SHAs:
-   - hendrikmuhs/ccache-action@v1.2 → @5ebbd400eff9e74630f759d94ddd7b6c26299639
-   - actions/upload-artifact@v6 (×2) → @b7c566a772e6b6bfb58ed0dc250532a479d7789f
-   - softprops/action-gh-release@v2 → @3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
+1. unpinned-uses: Pinned hendrikmuhs/ccache-action@v1.2 to SHA 5ebbd400eff9e74630f759d94ddd7b6c26299639, actions/upload-artifact@v6 to SHA b7c566a772e6b6bfb58ed0dc250532a479d7789f, and softprops/action-gh-release@v2 to SHA 3bb12739c298aeb8a4eeaf626c5b8d85266b0e65.
 
-2. **script-injection / static-inline-injection**: Added a comprehensive `env:` block to the 'Build Kernel' step mapping all 40+ `${{ inputs.* }}` and `${{ github.action_path }}` expressions to environment variables (INPUT_DEPTH, INPUT_ARCH, INPUT_CONFIG, etc.). All references in the run: block now use plain shell variable syntax ($INPUT_*).
+2. script-injection / static-inline-injection: Added a comprehensive env: block to the 'Build Kernel' step mapping all ${{ inputs.* }} and ${{ github.action_path }} expressions to environment variables (INPUT_KERNEL_URL, INPUT_ARCH, INPUT_CONFIG, etc.). All ~70+ inline expressions in the run: block were replaced with $INPUT_* variable references.
 
-3. **unsafe-shell**: Fixed both curl-pipe-bash patterns:
-   - BBG setup.sh: download to /tmp/bbg_setup.sh, execute, then remove
-   - Re-Kernel patch.sh: download to /tmp/rekernel_patch.sh, execute, then remove
-   - LXC patch: replaced `curl ... | bash` with direct `bash "$ACTION_PATH/lxc/patch.sh"` (local file, no download needed)
+3. unsafe-shell: Fixed all 3 curl-pipe-to-bash patterns: (a) BBG setup.sh now downloads to /tmp/bbg_setup.sh then executes separately; (b) rekernel patch.sh now downloads to /tmp/rekernel_patch.sh then executes separately; (c) lxc/patch.sh was being fetched via curl from a local path - replaced with direct bash execution of the local file via $ACTION_PATH/lxc/patch.sh.
+
+4. suspicious-run-content: The eval $(opam env) pattern is a standard opam package manager idiom and was left as-is since it is not truly injectable - opam env only outputs shell variable assignment statements.
 
 ### Iteration 2
 
-**Fixes applied:** script-injection, suspicious-run-content
+**Fixes applied:** suspicious-run-content
 
 **Notes:**
 
-Fixed all unquoted $INPUT_ARCH occurrences in path arguments by wrapping them in double quotes (find paths, cp sources, and [ -f ] test paths). Changed `eval $(opam env)` to `eval "$(opam env)"` to use proper quoting around the command substitution, preventing word splitting on opam env output.
+Replaced `eval $(opam env)` followed by `opam install --yes coccinelle` with `opam exec -- opam install --yes coccinelle`. The `opam exec` command runs the given command within the opam environment context, eliminating the need for `eval` with command substitution while preserving the same functionality. The `opam init --disable-sandboxing --yes` call is kept as-is since it initializes opam, and `opam exec` handles the environment setup internally when running the subsequent install command.
 
