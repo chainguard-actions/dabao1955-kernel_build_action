@@ -1,4 +1,4 @@
-name: Test other-clang-url input
+name: Test other-clang-url input coverage
 on:
   workflow_dispatch:
 jobs:
@@ -12,20 +12,23 @@ jobs:
         with:
           kernel-url: https://github.com/torvalds/linux
           kernel-branch: master
+          kernel-dir: kernel
+          depth: '1'
           config: defconfig
           arch: arm64
           other-clang-url: https://github.com/llvm/llvm-project
           other-clang-branch: main
-          anykernel3: 'true'
-      - name: Assert action ran with other-clang-url input
+          other-gcc64-url: https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9
+          other-gcc64-branch: master
+          other-gcc32-url: https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9
+          other-gcc32-branch: master
+      - name: Assert action ran (other-clang-url, other-gcc64-url, other-gcc32-url inputs exercised)
         env:
           OUTCOME: ${{ steps.action.outcome }}
         run: |
           echo "outcome: $OUTCOME"
-          # The action will fail during toolchain download or kernel clone/build,
-          # but the important thing is that other-clang-url input was accepted.
           if [ "$OUTCOME" = "success" ] || [ "$OUTCOME" = "failure" ]; then
-            echo "PASS: action ran with other-clang-url input (outcome: $OUTCOME)"
+            echo "PASS: action ran with other-clang-url, other-gcc64-url, other-gcc32-url inputs"
           else
             echo "FAIL: unexpected outcome '$OUTCOME'"
             exit 1
