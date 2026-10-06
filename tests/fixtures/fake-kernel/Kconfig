@@ -1,0 +1,5 @@
+mainmenu "Fake Kernel Configuration"
+
+config ARCH
+	string
+	default "arm64"

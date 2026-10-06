@@ -1,0 +1,3 @@
+# Minimal fake defconfig for testing
+CONFIG_ARM64=y
+CONFIG_64BIT=y
