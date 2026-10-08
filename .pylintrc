@@ -1,0 +1,22 @@
+[MASTER]
+# Python version
+py-version = 3.10
+
+# Ignore external/legacy files and test directories
+ignore = mkdtboimg.py,
+         __pytest__,
+         __pycache__
+
+# No global disables needed for main code
+disable =
+
+[FORMAT]
+# Allow longer lines
+max-line-length = 120
+
+[DESIGN]
+# Allow more complex functions
+max-args = 10
+max-locals = 20
+max-branches = 20
+max-statements = 100

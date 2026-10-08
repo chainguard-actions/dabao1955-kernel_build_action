@@ -1,0 +1,622 @@
+import * as core from '@actions/core';
+import * as exec from '@actions/exec';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { getActionPath, fileExists } from './utils';
+import { deStaticizeSelinuxForKsu } from './selinux';
+import type { KernelVersion } from './kernel';
+
+/**
+ * Source files that receive a KernelSU manual hook, together with the symbol
+ * the hook injects. Used to verify the Coccinelle patch actually landed.
+ */
+export const KSU_MANUAL_HOOK_MARKERS: { file: string; markers: string[] }[] = [
+  { file: 'fs/exec.c', markers: ['ksu_handle_execveat'] },
+  { file: 'fs/open.c', markers: ['ksu_handle_faccessat'] },
+  { file: 'fs/stat.c', markers: ['ksu_handle_stat'] },
+  { file: 'drivers/input/input.c', markers: ['ksu_handle_input_handle_event'] },
+  { file: 'fs/read_write.c', markers: ['ksu_handle_vfs_read', 'ksu_handle_sys_read'] },
+  { file: 'fs/devpts/inode.c', markers: ['ksu_handle_devpts'] },
+  { file: 'drivers/tty/pty.c', markers: ['ksu_handle_devpts'] },
+];
+
+/**
+ * Collect GNU patch reject/backup siblings (`<file>.rej`, `<file>.orig`) for
+ * the given source files, so a failed patch leaves visible evidence instead of
+ * a silently half-patched tree.
+ */
+export function collectRejectFiles(kernelDir: string, files: string[]): string[] {
+  const rejects: string[] = [];
+  for (const file of files) {
+    for (const ext of ['.rej', '.orig']) {
+      const candidate = path.join(kernelDir, `${file}${ext}`);
+      if (fileExists(candidate)) {
+        rejects.push(candidate);
+      }
+    }
+  }
+  return rejects;
+}
+
+function stripCComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+}
+
+function isHookDeclaration(line: string, escaped: string): boolean {
+  const match = line.match(new RegExp(`^(.*?)\\b${escaped}\\s*\\(`));
+  if (!match) {
+    return false;
+  }
+  const before = match[1].trim();
+  if (!before) {
+    return false;
+  }
+  if (/\b(?:return|if|else|for|while|switch|sizeof|typeof|case)\b/.test(before)) {
+    return false;
+  }
+  return /^(?=.*[A-Za-z_])[\w\s*]+$/.test(before);
+}
+
+function hasActiveHookCall(content: string, marker: string): boolean {
+  const escaped = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const callRe = new RegExp(`\\b${escaped}\\s*\\(`);
+  for (const line of stripCComments(content).split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#') || isHookDeclaration(trimmed, escaped)) {
+      continue;
+    }
+    if (callRe.test(trimmed)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Verify that KernelSU manual-hook patches were actually applied on a
+ * non-GKI/no-kprobe build. Throws when hook source files exist but none carry
+ * an injected `ksu_handle_*` symbol, which would otherwise produce a kernel
+ * without KernelSU after a "successful" build.
+ */
+export function verifyKsuManualHooks(kernelDir: string): void {
+  const existing = KSU_MANUAL_HOOK_MARKERS.filter(({ file }) =>
+    fileExists(path.join(kernelDir, file))
+  );
+  if (existing.length === 0) {
+    // Tree layout not recognised, nothing to verify against.
+    return;
+  }
+
+  const applied = existing.filter(({ file, markers }) => {
+    const content = fs.readFileSync(path.join(kernelDir, file), 'utf-8');
+    return markers.some((marker) => hasActiveHookCall(content, marker));
+  });
+  const missing = existing.filter((entry) => !applied.includes(entry));
+
+  if (missing.length > 0) {
+    core.warning(`KernelSU manual hooks missing in: ${missing.map((m) => m.file).join(', ')}`);
+  }
+
+  if (applied.length === 0) {
+    const rejects = collectRejectFiles(
+      kernelDir,
+      existing.map((entry) => entry.file)
+    );
+    const rejectHint =
+      rejects.length > 0 ? ` Rejected hunks were left behind: ${rejects.join(', ')}.` : '';
+    throw new Error(
+      'KernelSU manual hook patches were not applied (no ksu_handle_* symbols found). ' +
+        `Checked: ${existing.map((entry) => entry.file).join(', ')}.${rejectHint}`
+    );
+  }
+}
+
+/**
+ * Config tweak appended to the defconfig for a specific KernelSU fork.
+ */
+interface KsuConfigTweak {
+  option: string;
+  value: string;
+  /** Optional kernel-version condition. */
+  when?: (kernelVersion: KernelVersion) => boolean;
+}
+
+/**
+ * Integration strategy for a known third-party KernelSU fork,
+ * selected automatically from the ksu-url input.
+ */
+export interface KsuForkStrategy {
+  id: string;
+  label: string;
+  /**
+   * Pinned commit SHA that hosts kernel/setup.sh for raw download.
+   * Immutable revisions keep the executed script reproducible; bump the SHA
+   * deliberately when picking up upstream changes.
+   */
+  setupSha: string;
+  /** Ref passed to setup.sh when the user did not pin ksu-version. */
+  defaultInstallRef: string | ((kernelVersion: KernelVersion) => string);
+  /** defconfig tweaks applied after integration. */
+  configTweaks: KsuConfigTweak[];
+}
+
+function isKernelBelow(version: number, patchlevel: number, kv: KernelVersion): boolean {
+  return kv.version < version || (kv.version === version && kv.patchlevel < patchlevel);
+}
+
+/**
+ * Known forks, keyed by lowercase `owner/repo`.
+ * `setupSha` values are pinned commit SHAs of the revision that hosts
+ * kernel/setup.sh (KernelSU-Next has no `main` branch; its default branch
+ * is `dev`).
+ */
+const KSU_FORKS: Record<string, KsuForkStrategy> = {
+  'backslashxx/kernelsu': {
+    id: 'xxksu',
+    label: 'KernelSU (xxksu)',
+    setupSha: 'e42a8edb0fc9a0c103124b3423761046f77367ce',
+    defaultInstallRef: 'master',
+    configTweaks: [{ option: 'CONFIG_KSU_KPROBES_KSUD', value: 'n' }],
+  },
+  'rsuntk/kernelsu': {
+    id: 'rsuntk',
+    label: 'KernelSU (rsuntk)',
+    setupSha: '648e5988cf421172769f80ce07f86331b548c053',
+    defaultInstallRef: 'main',
+    configTweaks: [{ option: 'CONFIG_KSU_MANUAL_HOOK', value: 'y' }],
+  },
+  'sukisu-ultra/sukisu-ultra': {
+    id: 'sukisu',
+    label: 'SukiSU-Ultra',
+    setupSha: '42d7fda3d787b7df90fc440a50bb9c8216a3fdef',
+    defaultInstallRef: 'builtin',
+    configTweaks: [],
+  },
+  'shirkneko/sukisu-ultra': {
+    id: 'sukisu',
+    label: 'SukiSU-Ultra',
+    setupSha: '42d7fda3d787b7df90fc440a50bb9c8216a3fdef',
+    defaultInstallRef: 'builtin',
+    configTweaks: [],
+  },
+  'kernelsu-next/kernelsu-next': {
+    id: 'next',
+    label: 'KernelSU-Next',
+    setupSha: '27f891bfcb2c7d4d399dd2151298f3dec1ae199c',
+    defaultInstallRef: (kv) => (isKernelBelow(5, 10, kv) ? 'legacy' : 'main'),
+    configTweaks: [
+      { option: 'CONFIG_KSU_MANUAL_HOOK', value: 'y' },
+      {
+        option: 'CONFIG_KSU_ALLOWLIST_WORKAROUND',
+        value: 'y',
+        when: (kv) => isKernelBelow(5, 10, kv),
+      },
+    ],
+  },
+  'resukisu/resukisu': {
+    id: 'resukisu',
+    label: 'ReSukiSU',
+    setupSha: 'e5423590bec3e24daffa4e9555c9592071319c68',
+    defaultInstallRef: 'main',
+    configTweaks: [{ option: 'CONFIG_KSU_MANUAL_HOOK', value: 'y' }],
+  },
+};
+
+/** Upstream KernelSU revision pinned for downloading kernel/setup.sh. */
+const KSU_UPSTREAM_SHA = '08b2e9e451325ebe506c273cfb0fde17d18f592f';
+
+/**
+ * Detect a known KernelSU fork from a GitHub URL.
+ * Accepts `github.com/owner/repo(.git)` and
+ * `raw.githubusercontent.com/owner/repo/...` forms.
+ */
+export function detectKsuFork(url: string): KsuForkStrategy | undefined {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return undefined;
+  }
+
+  const segments = parsed.pathname
+    .replace(/\.git$/, '')
+    .split('/')
+    .filter((segment) => segment.length > 0);
+  if (segments.length < 2) {
+    return undefined;
+  }
+
+  const key = `${segments[0]}/${segments[1]}`.toLowerCase();
+  return KSU_FORKS[key];
+}
+
+/** GitHub domains accepted for the ksu-url input. */
+const TRUSTED_KSU_DOMAINS = [
+  'github.com',
+  'raw.githubusercontent.com',
+  'gist.githubusercontent.com',
+];
+
+/**
+ * Validate ksu-url and reduce it to a canonical
+ * `https://github.com/<owner>/<repo>` repository base.
+ *
+ * Accepts repository URLs (with or without a `.git` suffix, optionally
+ * followed by `/tree/...` or `/blob/...` paths) as well as
+ * `raw.githubusercontent.com` file URLs, so the setup-script URL is always
+ * built from the repository base instead of duplicating a file path.
+ */
+export function normalizeKsuUrl(url: string): string {
+  if (!url.startsWith('https://')) {
+    throw new Error('ksu-url must use HTTPS');
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error('ksu-url must be a valid URL');
+  }
+  if (!TRUSTED_KSU_DOMAINS.includes(parsed.hostname)) {
+    throw new Error(
+      `ksu-url must be from trusted GitHub domain: ${TRUSTED_KSU_DOMAINS.join(', ')}`
+    );
+  }
+  const segments = parsed.pathname
+    .replace(/\/+$/, '')
+    .replace(/\.git$/, '')
+    .split('/')
+    .filter((segment) => segment.length > 0);
+  if (segments.length < 2) {
+    throw new Error('ksu-url must point to a GitHub repository (owner/repo)');
+  }
+  return `https://github.com/${segments[0]}/${segments[1]}`;
+}
+
+/** Apply fork-specific defconfig tweaks. */
+function applyKsuForkTweaks(
+  fork: KsuForkStrategy,
+  configPath: string,
+  kernelVersion: KernelVersion
+): void {
+  for (const tweak of fork.configTweaks) {
+    if (tweak.when && !tweak.when(kernelVersion)) {
+      continue;
+    }
+    fs.appendFileSync(configPath, `${tweak.option}=${tweak.value}\n`);
+    core.info(`Applied ${fork.label} tweak: ${tweak.option}=${tweak.value}`);
+  }
+}
+
+/**
+ * Setup KernelSU
+ */
+export async function setupKernelSU(
+  kernelDir: string,
+  configPath: string,
+  options: {
+    version: string;
+    lkm: boolean;
+    other: boolean;
+    url?: string;
+  },
+  kernelVersion: KernelVersion
+): Promise<void> {
+  core.startGroup('Initializing KernelSU');
+
+  // Display kernel version and GKI status
+  core.info(
+    `Kernel version: ${kernelVersion.version}.${kernelVersion.patchlevel}.${kernelVersion.sublevel}`
+  );
+  core.info(`GKI: ${kernelVersion.isGki}`);
+
+  const ksuDir = path.join(kernelDir, 'KernelSU', 'kernel');
+
+  // Check if KernelSU is already initialized
+  if (fileExists(path.join(ksuDir, 'Kconfig'))) {
+    core.info('KernelSU has been initialized, skipping.');
+    core.endGroup();
+    return;
+  }
+
+  // Download setup script
+  const setupScriptPath = path.join(kernelDir, 'ksu_setup.sh');
+  let ksuUrl: string;
+  let forkStrategy: KsuForkStrategy | undefined;
+  let versionPinned = false;
+
+  if (options.other && options.url) {
+    // Validate ksu-url and reduce it to a canonical repository base URL.
+    const repoUrl = normalizeKsuUrl(options.url);
+
+    forkStrategy = detectKsuFork(repoUrl);
+    // 'main' is the ksu-version default, treat it as "not pinned"
+    versionPinned = options.version !== '' && options.version !== 'main';
+
+    if (forkStrategy) {
+      core.info(`Detected known KernelSU fork: ${forkStrategy.label}`);
+      const setupRef = versionPinned ? options.version : forkStrategy.setupSha;
+      ksuUrl = `${repoUrl}/raw/${setupRef}/kernel/setup.sh`;
+    } else {
+      core.warning(
+        `ksu-url does not match a known KernelSU fork (${Object.keys(KSU_FORKS).join(', ')}); ` +
+          'falling back to generic integration without fork-specific tweaks'
+      );
+      ksuUrl = `${repoUrl}/raw/${options.version}/kernel/setup.sh`;
+    }
+  } else {
+    ksuUrl = `https://raw.githubusercontent.com/tiann/KernelSU/${KSU_UPSTREAM_SHA}/kernel/setup.sh`;
+  }
+
+  core.info(`Downloading KernelSU setup script from: ${ksuUrl}`);
+  await exec.exec('curl', ['-sSLf', ksuUrl, '-o', setupScriptPath]);
+
+  // Determine version
+  let kver = options.version;
+  if (options.other && forkStrategy && !versionPinned) {
+    kver =
+      typeof forkStrategy.defaultInstallRef === 'function'
+        ? forkStrategy.defaultInstallRef(kernelVersion)
+        : forkStrategy.defaultInstallRef;
+    core.info(`${forkStrategy.label}: using default ref '${kver}' (pin ksu-version to override)`);
+  } else if (!kernelVersion.isGki && !options.other) {
+    core.warning(`Warning: KernelSU has dropped support for non-GKI kernels since 0.9.5.`);
+    core.info('Forcing switch to v0.9.5');
+    kver = 'v0.9.5';
+  }
+
+  // Run setup script (use relative path since cwd is set to kernelDir)
+  await exec.exec('bash', ['ksu_setup.sh', kver], { cwd: kernelDir });
+
+  // Handle LKM mode
+  if (options.lkm) {
+    const hasKprobes = isConfigEnabled(configPath, 'CONFIG_KPROBES');
+    if (hasKprobes) {
+      sedReplace(configPath, 'CONFIG_KSU=y', 'CONFIG_KSU=m');
+    } else {
+      // Modify Kconfig
+      const kconfigPath = path.join(kernelDir, 'drivers', 'kernelsu', 'Kconfig');
+      if (fileExists(kconfigPath)) {
+        sedReplaceInRange(kconfigPath, 'config KSU', 'help', 'default y', 'default m');
+      }
+    }
+  } else if (!kernelVersion.isGki) {
+    // Apply patches for non-GKI kernels
+    const hasKprobes = isConfigEnabled(configPath, 'CONFIG_KPROBES');
+    if (!hasKprobes) {
+      core.info('CONFIG_KPROBES not enabled, applying KernelSU patches...');
+
+      // Setup opam and coccinelle
+      await exec.exec('opam', ['init', '--disable-sandboxing', '--yes']);
+
+      // Install coccinelle with opam environment evaluated
+      await exec.exec('bash', ['-c', 'eval $(opam env) && opam install --yes coccinelle']);
+
+      // Apply patches with opam environment evaluated
+      const applyCocciPath = path.join(getActionPath(), 'kernelsu', 'apply_cocci.py');
+      const cocciDir = path.join(getActionPath(), 'kernelsu');
+      try {
+        await exec.exec(
+          'bash',
+          ['-c', `eval $(opam env) && python3 ${applyCocciPath} --cocci-dir ${cocciDir}`],
+          {
+            cwd: kernelDir,
+          }
+        );
+      } catch {
+        core.warning('Failed to apply KernelSU patches');
+      }
+
+      // KernelSU's static-export check imports SELinux internals that some
+      // kernels declare static; drop the qualifier with Coccinelle.
+      await deStaticizeSelinuxForKsu(kernelDir, configPath, kernelVersion);
+
+      // Make a failed manual-hook patch visible instead of silently shipping
+      // a kernel without KernelSU.
+      verifyKsuManualHooks(kernelDir);
+    }
+  }
+
+  // Apply fork-specific defconfig tweaks
+  if (forkStrategy) {
+    applyKsuForkTweaks(forkStrategy, configPath, kernelVersion);
+  }
+
+  core.endGroup();
+}
+
+/**
+ * Setup BBG (BaseBandGuard)
+ */
+export async function setupBBG(
+  kernelDir: string,
+  configPath: string,
+  options?: {
+    blockBoot?: boolean;
+  }
+): Promise<void> {
+  core.startGroup('Initializing BBG');
+
+  // Download and run setup script
+  const bbgSetupPath = path.join(kernelDir, 'bbg_setup.sh');
+  await exec.exec('curl', [
+    '-sSLf',
+    'https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh',
+    '-o',
+    bbgSetupPath,
+  ]);
+  await exec.exec('bash', [bbgSetupPath], { cwd: kernelDir });
+
+  // Modify Kconfig
+  const kconfigPath = path.join(kernelDir, 'security', 'Kconfig');
+  if (fileExists(kconfigPath)) {
+    let content = fs.readFileSync(kconfigPath, 'utf-8');
+
+    // Add baseband_guard to LSM default
+    const lsmRegex = /(config LSM[\s\S]*?default[\s\S]*?lockdown)([^,]*)/;
+    if (lsmRegex.test(content) && !content.includes('baseband_guard')) {
+      content = content.replace(lsmRegex, '$1,baseband_guard$2');
+      fs.writeFileSync(kconfigPath, content);
+    }
+  }
+
+  // Add to config
+  fs.appendFileSync(configPath, 'CONFIG_BBG=y\n');
+
+  // Optionally protect the boot partition against direct writes
+  if (options?.blockBoot) {
+    fs.appendFileSync(configPath, 'CONFIG_BBG_BLOCK_BOOT=y\n');
+    core.info('Enabled CONFIG_BBG_BLOCK_BOOT');
+  }
+
+  core.endGroup();
+}
+
+/**
+ * Setup NoMount (https://github.com/maxsteeel/nomount)
+ */
+export async function setupNoMount(kernelDir: string, configPath: string): Promise<void> {
+  core.startGroup('Initializing NoMount');
+
+  // Download and run upstream setup script (pinned to an immutable revision)
+  const nomountSetupPath = path.join(kernelDir, 'nomount_setup.sh');
+  await exec.exec('curl', [
+    '-sSLf',
+    'https://github.com/maxsteeel/nomount/raw/cc1fb4ecc2b328b1d1c284974240eb5746bc9433/kernel/setup.sh',
+    '-o',
+    nomountSetupPath,
+  ]);
+  await exec.exec('bash', [nomountSetupPath], { cwd: kernelDir });
+
+  // Add to config
+  fs.appendFileSync(configPath, 'CONFIG_NOMOUNT=y\n');
+
+  core.endGroup();
+}
+
+/**
+ * Setup Re-Kernel
+ */
+export async function setupReKernel(
+  kernelDir: string,
+  configPath: string,
+  arch: string
+): Promise<void> {
+  core.startGroup('Initializing Re-Kernel');
+
+  const patchScript = path.join(getActionPath(), 'rekernel', 'patch.py');
+  await exec.exec('python3', [patchScript, '--config', configPath, '--arch', arch], {
+    cwd: kernelDir,
+  });
+
+  core.endGroup();
+}
+
+/**
+ * Setup NetHunter
+ */
+export async function setupNetHunter(
+  kernelDir: string,
+  configPath: string,
+  options: {
+    patch: boolean;
+  }
+): Promise<void> {
+  core.startGroup('Initializing Kali NetHunter');
+
+  // Run config script
+  const configScript = path.join(getActionPath(), 'config.py');
+  await exec.exec('python3', [configScript, '--type', 'nethunter', configPath, '-w']);
+
+  // Apply patches if requested
+  if (options.patch) {
+    const patchScript = path.join(getActionPath(), 'nethunter', 'patch.py');
+    await exec.exec('python3', [patchScript], { cwd: kernelDir });
+  }
+
+  core.endGroup();
+}
+
+/**
+ * Setup LXC
+ */
+export async function setupLXC(
+  kernelDir: string,
+  configPath: string,
+  options: {
+    patch: boolean;
+  }
+): Promise<void> {
+  core.startGroup('Enabling LXC');
+
+  // Run config script
+  const configScript = path.join(getActionPath(), 'config.py');
+  await exec.exec('python3', [configScript, '--type', 'lxc', configPath, '-w']);
+
+  // Apply patches if requested
+  if (options.patch) {
+    const patchScript = path.join(getActionPath(), 'lxc', 'patch_cocci.py');
+    const cocciDir = path.join(getActionPath(), 'lxc');
+    await exec.exec('python3', [patchScript, '--cocci-dir', cocciDir], { cwd: kernelDir });
+  }
+
+  core.endGroup();
+}
+
+/**
+ * Check if config option is enabled
+ */
+function isConfigEnabled(configPath: string, option: string): boolean {
+  if (!fileExists(configPath)) {
+    return false;
+  }
+
+  const content = fs.readFileSync(configPath, 'utf-8');
+  const regex = new RegExp(`^${option}=y$`, 'm');
+  return regex.test(content);
+}
+
+/**
+ * Simple sed replace
+ */
+function sedReplace(filePath: string, search: string, replace: string): void {
+  if (!fileExists(filePath)) {
+    return;
+  }
+
+  let content = fs.readFileSync(filePath, 'utf-8');
+  content = content.replace(new RegExp(search, 'g'), replace);
+  fs.writeFileSync(filePath, content);
+}
+
+/**
+ * Sed replace within range
+ */
+function sedReplaceInRange(
+  filePath: string,
+  startPattern: string,
+  endPattern: string,
+  search: string,
+  replace: string
+): void {
+  if (!fileExists(filePath)) {
+    return;
+  }
+
+  const content = fs.readFileSync(filePath, 'utf-8');
+  const lines = content.split('\n');
+  let inRange = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].includes(startPattern)) {
+      inRange = true;
+    }
+    if (inRange && lines[i].includes(endPattern)) {
+      inRange = false;
+    }
+    if (inRange && lines[i].includes(search)) {
+      lines[i] = lines[i].replace(search, replace);
+    }
+  }
+
+  fs.writeFileSync(filePath, lines.join('\n'));
+}
