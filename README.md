@@ -16,6 +16,7 @@ Hardened by [Chainguard](https://www.chainguard.dev) from the upstream action at
 | v1.10.3 | [`v1.10.3`](https://github.com/chainguard-actions/dabao1955-kernel_build_action/tree/v1.10.3) | [`ebfb796`](https://github.com/dabao1955/kernel_build_action/commit/ebfb796cd7dd45ea37b6fa05371b2c9651d2f5ff) |
 | v1.10.4 | [`v1.10.4`](https://github.com/chainguard-actions/dabao1955-kernel_build_action/tree/v1.10.4) | [`9416bfe`](https://github.com/dabao1955/kernel_build_action/commit/9416bfe872cbd10d590ed173eb4b892e6abac2c1) |
 | v1.10.5 | [`v1.10.5`](https://github.com/chainguard-actions/dabao1955-kernel_build_action/tree/v1.10.5) | [`39d105e`](https://github.com/dabao1955/kernel_build_action/commit/39d105e8373adce78dac983bfe3ae3141c9456a9) |
+| v1.10.6 | [`v1.10.6`](https://github.com/chainguard-actions/dabao1955-kernel_build_action/tree/v1.10.6) | [`c61fc39`](https://github.com/dabao1955/kernel_build_action/commit/c61fc39e72624a641caf23b71660aa4de2bff036) |
 | v1.9.2 | [`v1.9.2`](https://github.com/chainguard-actions/dabao1955-kernel_build_action/tree/v1.9.2) | [`d562505`](https://github.com/dabao1955/kernel_build_action/commit/d562505c190de0b8e852c6b763c76118b0432ab2) |
 
 ## Privacy
